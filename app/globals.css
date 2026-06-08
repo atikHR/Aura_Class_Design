@@ -60,3 +60,37 @@ a {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Fullscreen Overrides */
+body.fullscreen-active {
+  overflow: hidden !important;
+}
+body.fullscreen-active aside {
+  display: none !important;
+}
+body.fullscreen-active nav {
+  display: none !important;
+}
+body.fullscreen-active main {
+  margin-left: 0 !important;
+  padding: 0 !important;
+  z-index: 100 !important;
+}
+
+/* Force landscape mode rotation on mobile portrait screens when fullscreen is active */
+@media (max-width: 1023px) and (orientation: portrait) {
+  body.fullscreen-active .video-player-container-rotated {
+    width: 100vh !important;
+    height: 100vw !important;
+    transform: rotate(90deg) !important;
+    transform-origin: center !important;
+    position: fixed !important;
+    top: 50% !important;
+    left: 50% !important;
+    margin-top: -50vw !important;
+    margin-left: -50vh !important;
+    z-index: 9999 !important;
+  }
+}
+
+
