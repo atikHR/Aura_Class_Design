@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { PageTransition } from "@/components/PageTransition";
+import ScreenshotEditor from "./ScreenshotEditor";
 import { LessonTopBar } from "./LessonTopBar";
 import { 
   Play, 
@@ -31,7 +32,9 @@ import {
   BrainCircuit,
   ArrowRight,
   X,
-  Settings
+  Settings,
+  Camera,
+  Pen
 } from "lucide-react";
 
 // Definition of classroom topics
@@ -166,8 +169,9 @@ export function FocusedClassroomLayout() {
   const [voiceActive, setVoiceActive] = useState(true);
   
   // Interactive View Modes within the Player Screen
-  // 'video' = Whiteboard, 'graph' = Velocity Graph, 'example' = worked example, 'practice' = MCQ question
-  const [activeMode, setActiveMode] = useState<'video' | 'graph' | 'example' | 'practice'>('video');
+  // Interactive View Modes within the Player Screen
+  // 'video' = Whiteboard, 'graph' = Velocity Graph, 'example' = worked example, 'practice' = MCQ question, 'explanation' = AI doubt explanation
+  const [activeMode, setActiveMode] = useState<'video' | 'graph' | 'example' | 'practice' | 'explanation'>('video');
   
   // Raise Hand State
   const [handRaised, setHandRaised] = useState(false);
@@ -177,13 +181,17 @@ export function FocusedClassroomLayout() {
   const [isRecordingVoice, setIsRecordingVoice] = useState(false);
   const [voiceTimer, setVoiceTimer] = useState(0);
   const [aiResponding, setAiResponding] = useState(false);
-  const [chatHistory, setChatHistory] = useState<Array<{sender: 'student' | 'ai', text: string, time: string, isVoice?: boolean}>>([
+  const [chatHistory, setChatHistory] = useState<Array<{sender: 'student' | 'ai', text: string, time: string, isVoice?: boolean, attachment?: string}>>([
     {
       sender: 'ai',
       text: "Hello! I am Dr. Aura, your AI Physics instructor. Feel free to raise your hand at any moment during the lesson if you have a doubt, want another example, or would like to test your understanding!",
       time: "02:00"
     }
   ]);
+  
+  // Screenshot Editor State
+  const [isEditingScreenshot, setIsEditingScreenshot] = useState(false);
+  const [pendingExplanation, setPendingExplanation] = useState(false);
   
   // MCQ Practice State
   const [selectedMCQOption, setSelectedMCQOption] = useState<string | null>(null);
@@ -194,16 +202,22 @@ export function FocusedClassroomLayout() {
 
   // Sidebar Resizable Split-Pane States
   const [sidebarWidth, setSidebarWidth] = useState(380);
+  const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
   const isResizing = useRef(false);
   
   // Refs
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const desktopChatContainerRef = useRef<HTMLDivElement>(null);
+  const mobileChatContainerRef = useRef<HTMLDivElement>(null);
   const voiceIntervalRef = useRef<any>(null);
   const playerRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll chat to bottom
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const scrollDesktop = desktopChatContainerRef.current;
+    if (scrollDesktop) scrollDesktop.scrollTop = scrollDesktop.scrollHeight;
+    
+    const scrollMobile = mobileChatContainerRef.current;
+    if (scrollMobile) scrollMobile.scrollTop = scrollMobile.scrollHeight;
   }, [chatHistory, aiResponding]);
 
   // Sync body class for fullscreen overrides (hiding website sidebar)
@@ -224,17 +238,19 @@ export function FocusedClassroomLayout() {
       
       if (isCurrentlyFullscreen) {
         // Attempt to lock to landscape on mobile/tablet screens
-        if (window.innerWidth < 1024 && screen.orientation && typeof screen.orientation.lock === 'function') {
-          screen.orientation.lock("landscape").catch((err) => {
+        const orientation = screen.orientation as any;
+        if (window.innerWidth < 1024 && orientation && typeof orientation.lock === 'function') {
+          orientation.lock("landscape").catch((err: any) => {
             console.warn("Screen orientation lock failed:", err);
           });
         }
       } else {
         // Unlock orientation
-        if (screen.orientation && typeof screen.orientation.unlock === 'function') {
+        const orientation = screen.orientation as any;
+        if (orientation && typeof orientation.unlock === 'function') {
           try {
-            screen.orientation.unlock();
-          } catch (err) {
+            orientation.unlock();
+          } catch (err: any) {
             console.warn("Screen orientation unlock failed:", err);
           }
         }
@@ -349,7 +365,11 @@ export function FocusedClassroomLayout() {
   const handleToggleRaiseHand = () => {
     if (!handRaised) {
       setHandRaised(true);
-      setIsPlaying(false); // Auto-pause lesson
+      setIsPlaying(false);
+      // Auto-open Q&A on both mobile and desktop
+      setIsMobilePanelOpen(true);
+      setActiveMobileTab('qna');
+      setIsSidebarExpanded(true);
       
       // Add a greeting from AI
       const topicName = activeTopic.title.substring(3);
@@ -419,6 +439,7 @@ export function FocusedClassroomLayout() {
     
     // Auto-pause if not paused
     setIsPlaying(false);
+    setPendingExplanation(true);
     
     setChatHistory(prev => [
       ...prev,
@@ -453,6 +474,7 @@ export function FocusedClassroomLayout() {
       setIsPlaying(false); // Auto-pause on voice doubt
     } else {
       setIsRecordingVoice(false);
+      setPendingExplanation(true);
       // Submit simulated voice question
       setChatHistory(prev => [
         ...prev,
@@ -505,7 +527,7 @@ export function FocusedClassroomLayout() {
               className={`w-full bg-[#080d19] overflow-hidden group flex flex-col justify-between transition-all video-player-container-rotated ${
                 isFullscreen 
                   ? 'fixed inset-0 z-[100] w-screen h-screen rounded-none border-none' 
-                  : 'relative aspect-video rounded-none sm:rounded-3xl border-y sm:border border-cyan-500/20 shadow-[0_0_35px_rgba(6,182,212,0.1)]'
+                  : 'relative min-h-[300px] sm:min-h-0 aspect-[4/3] sm:aspect-video rounded-none sm:rounded-3xl border-y sm:border border-cyan-500/20 shadow-[0_0_35px_rgba(6,182,212,0.1)]'
               }`}
             >
               
@@ -540,7 +562,7 @@ export function FocusedClassroomLayout() {
                 
                 {/* Paused state overlay when raised hand */}
                 <AnimatePresence>
-                  {handRaised && (
+                  {handRaised && !isEditingScreenshot && (
                     <motion.div 
                       initial={{ opacity: 0 }}
                       animate={{ opacity: 1 }}
@@ -551,18 +573,37 @@ export function FocusedClassroomLayout() {
                       <div className="h-10 w-10 sm:h-16 sm:w-16 rounded-full bg-cyan-500/20 border border-cyan-400/40 flex items-center justify-center text-cyan-300 shadow-sm sm:shadow-[0_0_20px_rgba(34,211,238,0.3)] animate-pulse">
                         <span className="text-lg sm:text-3xl">✋</span>
                       </div>
-                      <div className="px-2">
+                      <div className="px-2 max-w-lg">
                         <h3 className="text-base sm:text-xl font-bold text-white">Lecture Paused</h3>
-                        <p className="text-[10px] sm:text-sm text-cyan-200 mt-1 max-w-md leading-relaxed">
-                          Please ask your question. Your teacher is listening, or if you want to text the question, you can do that too.
+                        <p className="text-[10px] sm:text-sm text-cyan-200 mt-1.5 leading-relaxed">
+                          Please ask your question. Your teacher is listening, or if you want to text the question, you can do that too. 
+                          <br className="hidden sm:block" />
+                          <span className="text-white/70">You can also capture the board to point out exactly where you have a doubt.</span>
                         </p>
                       </div>
-                      <button 
-                        onClick={() => { setHandRaised(false); setIsPlaying(true); }}
-                        className="rounded-full bg-cyan-500 hover:bg-cyan-400 px-4 sm:px-5 py-1.5 sm:py-2 text-[10px] sm:text-xs font-bold text-slate-900 shadow-md shadow-cyan-400/20 transition-all hover:scale-105"
-                      >
-                        Lower Hand & Resume
-                      </button>
+                      <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 mt-2">
+                        <button 
+                          onClick={() => { 
+                            setHandRaised(false); 
+                            if (pendingExplanation) {
+                              setActiveMode('explanation');
+                              setPendingExplanation(false);
+                            } else {
+                              setIsPlaying(true); 
+                            }
+                          }}
+                          className="rounded-full bg-cyan-500 hover:bg-cyan-400 px-4 sm:px-5 py-1.5 sm:py-2 text-[10px] sm:text-xs font-bold text-slate-900 shadow-md shadow-cyan-400/20 transition-all hover:scale-105"
+                        >
+                          Lower Hand & Resume
+                        </button>
+                        <button 
+                          onClick={() => setIsEditingScreenshot(true)}
+                          className="flex items-center justify-center gap-2 rounded-full bg-slate-800 hover:bg-slate-700 border border-slate-600 px-4 sm:px-5 py-1.5 sm:py-2 text-[10px] sm:text-xs font-bold text-white transition-all hover:scale-105"
+                        >
+                          <Camera size={14} />
+                          Capture Board
+                        </button>
+                      </div>
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -754,6 +795,40 @@ export function FocusedClassroomLayout() {
                           <p className="text-cyan-400 font-bold">Velocity = 600m (North) / 100s = 6 m/s North</p>
                         </div>
                       </details>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* MODE E: Explanation Mode */}
+                {activeMode === 'explanation' && (
+                  <motion.div 
+                    initial={{ opacity: 0 }} 
+                    animate={{ opacity: 1 }} 
+                    className="absolute inset-0 bg-[#0e1628] p-4 sm:p-6 flex flex-col justify-center items-center overflow-hidden w-full h-full text-center z-10"
+                  >
+                    <div className="absolute inset-0 opacity-10 pointer-events-none soft-grid" />
+                    <div className="max-w-3xl z-10 flex flex-col items-center justify-center gap-4 w-full h-full pt-8 pb-12">
+                      <h3 className="text-lg sm:text-xl font-bold text-white flex items-center justify-center gap-2 shrink-0">
+                        <span className="p-1.5 rounded bg-cyan-500/20 text-cyan-400"><BrainCircuit size={20} /></span>
+                        AI Teacher Explanation
+                      </h3>
+                      
+                      <div className="bg-black/40 border border-cyan-500/30 p-4 sm:p-5 rounded-2xl shadow-[0_0_30px_rgba(34,211,238,0.1)] relative w-full overflow-y-auto max-h-[50%] custom-scrollbar text-left shrink-0">
+                        <div className="absolute top-2 right-2 text-cyan-500/40 animate-pulse"><Pen size={16} /></div>
+                        <p className="text-[11px] sm:text-sm text-cyan-100 font-mono leading-relaxed pr-6">
+                          Let's clarify your doubt here on the board:<br/><br/>
+                          As we've discussed, <span className="text-yellow-400 font-bold">Speed</span> is a Scalar quantity (it only cares about magnitude, no direction), while <span className="text-emerald-400 font-bold">Velocity</span> is a Vector (it requires both magnitude + direction).<br/><br/>
+                          For example, if you walk 5 steps forward and 5 steps back, your total distance is 10, but your displacement (and thus average velocity) is exactly 0!
+                        </p>
+                      </div>
+                      
+                      <button 
+                        onClick={() => { setActiveMode('video'); setIsPlaying(true); setIsSidebarExpanded(false); }}
+                        className="px-6 py-2 sm:py-2.5 bg-cyan-500 hover:bg-cyan-400 text-slate-900 text-xs sm:text-sm font-bold rounded-full transition shadow-[0_0_15px_rgba(34,211,238,0.4)] hover:scale-105 active:scale-95 flex items-center gap-2 shrink-0 mt-2"
+                      >
+                        <Play size={14} fill="currentColor" />
+                        Got it! Resume Lesson
+                      </button>
                     </div>
                   </motion.div>
                 )}
@@ -960,6 +1035,41 @@ export function FocusedClassroomLayout() {
                 </div>
               </div>
 
+              <AnimatePresence>
+                {isEditingScreenshot && (
+                  <ScreenshotEditor 
+                    onSend={(dataUrl) => {
+                      setIsEditingScreenshot(false);
+                      setPendingExplanation(true);
+                      // Open Q&A panel so they can see the message
+                      setIsMobilePanelOpen(true);
+                      setActiveMobileTab('qna');
+                      
+                      setChatHistory(prev => [
+                        ...prev,
+                        { 
+                          sender: 'student', 
+                          text: doubtText || "I have a question about this part.", 
+                          time: formatTime(currentTime), 
+                          attachment: dataUrl 
+                        }
+                      ]);
+                      setDoubtText("");
+                      
+                      setAiResponding(true);
+                      setTimeout(() => {
+                        setAiResponding(false);
+                        setChatHistory(prev => [
+                          ...prev,
+                          { sender: 'ai', text: "I see your annotated screenshot! What exactly is confusing you here?", time: formatTime(currentTime) }
+                        ]);
+                      }, 2000);
+                    }}
+                    onCancel={() => setIsEditingScreenshot(false)}
+                    backgroundContent={null}
+                  />
+                )}
+              </AnimatePresence>
             </div>
 
             {/* Desktop-only Quick Action Chips Bar & Lesson Info underneath player */}
@@ -1061,28 +1171,41 @@ export function FocusedClassroomLayout() {
           </div>
 
           {/* Resizer Handle (Desktop only) */}
-          <div 
-            onMouseDown={handleMouseDown}
-            className="hidden xl:block w-1.5 self-stretch cursor-col-resize bg-white/5 hover:bg-cyan-400/50 active:bg-cyan-400 transition-all rounded-full select-none"
-            title="Drag to resize sidebar width"
-          />
+          {isSidebarExpanded && (
+            <div 
+              onMouseDown={handleMouseDown}
+              className="hidden xl:block w-1.5 self-stretch cursor-col-resize bg-white/5 hover:bg-cyan-400/50 active:bg-cyan-400 transition-all rounded-full select-none"
+              title="Drag to resize sidebar width"
+            />
+          )}
 
           {/* Right Column: Playlist / Q&A / Up Next Sidebar - Desktop Only */}
-          <div 
-            className="hidden xl:block space-y-6 px-4 sm:px-0 pb-12 sm:pb-0 xl:shrink-0"
-            style={{ width: `${sidebarWidth}px` }}
-          >
-            
-            {/* Q&A Chat panel beside the video player (Desktop Only when hand is raised) */}
-            <AnimatePresence>
-              {handRaised && (
+          <div className="hidden xl:flex relative shrink-0" style={{ width: isSidebarExpanded ? sidebarWidth : 64 }}>
+            <AnimatePresence initial={false}>
+              {isSidebarExpanded ? (
                 <motion.div
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.95 }}
-                  className="overflow-hidden"
+                  key="expanded-sidebar"
+                  initial={{ width: 0, opacity: 0 }}
+                  animate={{ width: sidebarWidth, opacity: 1 }}
+                  exit={{ width: 0, opacity: 0 }}
+                  transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                  className="space-y-6 overflow-hidden custom-scrollbar h-full"
                 >
-                  <div className="glass rounded-3xl border border-cyan-500/20 p-5 space-y-4 shadow-[0_8px_30px_rgba(6,182,212,0.15)] bg-slate-900/60 backdrop-blur-xl">
+                  <div style={{ width: sidebarWidth }} className="flex flex-col gap-6 px-4 sm:px-0 pb-12 sm:pb-0 h-full">
+                    
+                    {/* Collapse Button */}
+                    <div className="flex justify-end">
+                      <button 
+                        onClick={() => setIsSidebarExpanded(false)} 
+                        className="flex items-center gap-2 p-2 px-3 bg-white/5 text-slate-400 hover:text-white rounded-xl hover:bg-white/10 transition-all text-xs font-bold"
+                      >
+                        Collapse Sidebar
+                        <ChevronRight size={14} />
+                      </button>
+                    </div>
+
+                    {/* Q&A Chat panel beside the video player */}
+                    <div className="glass rounded-3xl border border-cyan-500/20 p-5 space-y-4 shadow-[0_8px_30px_rgba(6,182,212,0.15)] bg-slate-900/60 backdrop-blur-xl shrink-0">
                     
                     {/* Header */}
                     <div className="flex justify-between items-center border-b border-white/5 pb-3">
@@ -1101,7 +1224,7 @@ export function FocusedClassroomLayout() {
                     </div>
 
                     {/* Chat Area */}
-                    <div className="h-60 overflow-y-auto pr-2 space-y-4 custom-scrollbar text-xs">
+                    <div ref={desktopChatContainerRef} className="h-60 overflow-y-auto pr-2 space-y-4 custom-scrollbar text-xs">
                       {chatHistory.map((chat, idx) => (
                         <div key={idx} className={`flex gap-3 ${chat.sender === 'student' ? 'flex-row-reverse' : ''}`}>
                           <div className={`h-8 w-8 shrink-0 rounded-full flex items-center justify-center font-bold border ${
@@ -1117,6 +1240,11 @@ export function FocusedClassroomLayout() {
                               ? 'bg-white/10 text-white rounded-tr-none border border-white/5'
                               : 'bg-cyan-950/40 border border-cyan-500/20 text-cyan-100 rounded-tl-none'
                           }`}>
+                            {chat.attachment && (
+                              <div className="mb-2 rounded-lg overflow-hidden border border-white/10 shadow-sm relative w-full bg-black/40 aspect-video">
+                                <img src={chat.attachment} alt="Annotated screenshot" className="w-full h-full object-contain" />
+                              </div>
+                            )}
                             <p className="leading-relaxed font-sans">{chat.text}</p>
                             <span className="text-[9px] text-slate-400 block mt-1 text-right">{chat.time}</span>
                           </div>
@@ -1135,8 +1263,6 @@ export function FocusedClassroomLayout() {
                           </div>
                         </div>
                       )}
-                      
-                      <div ref={chatEndRef} />
                     </div>
 
                     {/* Waveform */}
@@ -1162,15 +1288,24 @@ export function FocusedClassroomLayout() {
                           value={doubtText}
                           onChange={(e) => setDoubtText(e.target.value)}
                           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitTextDoubt(); } }}
-                          className="w-full text-xs resize-none rounded-2xl border border-white/10 bg-black/40 p-3.5 pr-12 text-white placeholder-slate-500 outline-none transition focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
+                          className="w-full text-xs resize-none rounded-2xl border border-white/10 bg-black/40 p-3.5 pr-20 text-white placeholder-slate-500 outline-none transition focus:border-cyan-400/40 focus:ring-1 focus:ring-cyan-400/20"
                           rows={2}
                         />
-                        <button 
-                          onClick={handleVoiceClick}
-                          className={`absolute bottom-3 right-3 rounded-xl p-2 transition ${isRecordingVoice ? 'bg-red-500 text-white animate-pulse' : 'bg-white/10 text-cyan-300 hover:bg-white/20 hover:text-cyan-200'}`}
-                        >
-                          <Mic size={14} />
-                        </button>
+                        <div className="absolute bottom-2 right-2 flex items-center gap-1">
+                          <button 
+                            onClick={() => setIsEditingScreenshot(true)}
+                            className="rounded-xl p-2 transition text-slate-400 hover:text-white"
+                            title="Capture Board"
+                          >
+                            <Camera size={14} />
+                          </button>
+                          <button 
+                            onClick={handleVoiceClick}
+                            className={`rounded-xl p-2 transition ${isRecordingVoice ? 'bg-red-500 text-white animate-pulse' : 'bg-cyan-500/10 text-cyan-300 hover:bg-cyan-500/20'}`}
+                          >
+                            <Mic size={14} />
+                          </button>
+                        </div>
                       </div>
 
                       <button onClick={submitTextDoubt} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-cyan-400 hover:bg-cyan-300 text-slate-900 transition-all hover:scale-105 active:scale-95 shadow-lg shadow-cyan-400/20">
@@ -1179,9 +1314,6 @@ export function FocusedClassroomLayout() {
                     </div>
 
                   </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
             
             {/* Playlist: Related Lesson Topics */}
             <div className="glass rounded-3xl p-5 border border-white/10 space-y-4">
@@ -1278,14 +1410,36 @@ export function FocusedClassroomLayout() {
                 Take the kinematic practice challenge: 5 core question sets curated to solidify speed, velocity, and distance understanding.
               </p>
               <div className="mt-4 flex gap-2">
-                <button onClick={() => triggerQuickAction('practice')} className="flex-1 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-slate-900 py-2.5 text-xs font-bold transition-all shadow-md shadow-cyan-400/20 hover:scale-[1.02]">Start Quiz</button>
-                <button onClick={() => triggerQuickAction('example')} className="flex-1 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white py-2.5 text-xs font-bold transition-all">See Example</button>
+                    <button onClick={() => triggerQuickAction('practice')} className="flex-1 rounded-xl bg-cyan-400 hover:bg-cyan-300 text-slate-900 py-2.5 text-xs font-bold transition-all shadow-md shadow-cyan-400/20 hover:scale-[1.02]">Start Quiz</button>
+                    <button onClick={() => triggerQuickAction('example')} className="flex-1 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-white py-2.5 text-xs font-bold transition-all">See Example</button>
+                  </div>
+                </div>
+
               </div>
-            </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="collapsed-sidebar"
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
+              className="w-16 flex flex-col items-center gap-4 pt-2"
+            >
+              <button onClick={() => setIsSidebarExpanded(true)} className="p-3 bg-cyan-500/10 text-cyan-400 rounded-2xl hover:bg-cyan-500/20 transition-all shadow-[0_0_15px_rgba(34,211,238,0.1)] hover:scale-105" title="Expand Sidebar">
+                <MessageCircle size={20} />
+              </button>
+              <button onClick={() => setIsSidebarExpanded(true)} className="p-3 bg-white/5 text-slate-300 rounded-2xl hover:bg-white/10 transition-all hover:scale-105" title="View Playlist">
+                <BookOpen size={20} />
+              </button>
+              <button onClick={() => setIsSidebarExpanded(true)} className="p-3 bg-white/5 text-slate-300 rounded-2xl hover:bg-white/10 transition-all hover:scale-105" title="Practice Challenges">
+                <Presentation size={20} />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
 
-          </div>
-
-        </div>
+    </div>
 
       </div>
 
@@ -1424,6 +1578,11 @@ export function FocusedClassroomLayout() {
                           <div className={`max-w-[80%] p-3 rounded-xl text-xs ${
                             chat.sender === 'student' ? 'bg-white/10 text-white rounded-tr-none border border-white/5' : 'bg-cyan-950/40 border border-cyan-500/20 text-cyan-100 rounded-tl-none'
                           }`}>
+                            {chat.attachment && (
+                              <div className="mb-2 rounded-lg overflow-hidden border border-white/10 shadow-sm relative w-full bg-black/40 aspect-video">
+                                <img src={chat.attachment} alt="Annotated screenshot" className="w-full h-full object-contain" />
+                              </div>
+                            )}
                             <p className="leading-relaxed">{chat.text}</p>
                             <span className="text-[8px] text-slate-400 block mt-1 text-right">{chat.time}</span>
                           </div>
@@ -1461,15 +1620,23 @@ export function FocusedClassroomLayout() {
                           placeholder="Type your doubt here..."
                           value={doubtText}
                           onChange={(e) => setDoubtText(e.target.value)}
-                          className="w-full text-xs resize-none rounded-xl border border-white/10 bg-black/40 p-2.5 pr-10 text-white outline-none"
+                          className="w-full text-xs resize-none rounded-xl border border-white/10 bg-black/40 p-2.5 pr-16 text-white outline-none"
                           rows={2}
                         />
-                        <button 
-                          onClick={handleVoiceClick}
-                          className={`absolute bottom-2.5 right-2.5 rounded-lg p-1.5 ${isRecordingVoice ? 'bg-red-500 text-white animate-pulse' : 'text-cyan-300'}`}
-                        >
-                          <Mic size={12} />
-                        </button>
+                        <div className="absolute bottom-2 right-2 flex items-center gap-0.5">
+                          <button 
+                            onClick={() => setIsEditingScreenshot(true)}
+                            className="rounded-lg p-1.5 transition text-slate-400 hover:text-white"
+                          >
+                            <Camera size={12} />
+                          </button>
+                          <button 
+                            onClick={handleVoiceClick}
+                            className={`rounded-lg p-1.5 ${isRecordingVoice ? 'bg-red-500 text-white animate-pulse' : 'text-cyan-300'}`}
+                          >
+                            <Mic size={12} />
+                          </button>
+                        </div>
                       </div>
                       <button onClick={submitTextDoubt} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-400 text-slate-900">
                         <Send size={14} />

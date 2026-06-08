@@ -13,13 +13,18 @@ import {
   FlaskConical,
   MonitorSmartphone,
   Sparkles,
-  Star
+  Star,
+  Plus,
+  X,
+  Calendar
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import Link from "next/link";
+import { useState } from "react";
 import type { Chapter, ClassLevel, PricingPlan, Subject, Teacher, Topic } from "@/data/types";
 import { ProgressBar } from "./ProgressBar";
+import { addRoutine } from "@/lib/studentState";
 
 const iconMap = {
   Calculator,
@@ -66,32 +71,105 @@ export function ClassCard({ classLevel }: { classLevel: ClassLevel }) {
 
 export function SubjectCard({ subject }: { subject: Subject }) {
   const Icon = iconMap[subject.icon as keyof typeof iconMap] ?? BookOpen;
+  const [isRoutineModalOpen, setIsRoutineModalOpen] = useState(false);
+  const [rDay, setRDay] = useState("Monday");
+  const [rStartTime, setRStartTime] = useState("18:00");
+  const [rEndTime, setREndTime] = useState("19:00");
+
+  const handleCreateRoutine = (e: React.FormEvent) => {
+    e.preventDefault();
+    addRoutine({
+      id: `routine-${Date.now()}`,
+      subjectId: subject.id,
+      label: "Regular Study",
+      days: [rDay],
+      startTime: rStartTime,
+      endTime: rEndTime
+    });
+    setIsRoutineModalOpen(false);
+  };
 
   return (
-    <motion.div {...cardMotion} whileHover={{ y: -5 }} className="glass rounded-3xl p-5">
-      <div className="flex items-center gap-4">
-        <span className="grid h-12 w-12 place-items-center rounded-2xl bg-cyan-300/15 text-cyan-100">
-          <Icon size={24} />
-        </span>
-        <div>
-          <h3 className="text-lg font-semibold text-white">{subject.name}</h3>
-          <p className="text-sm text-slate-300">{subject.chapterCount} chapters</p>
+    <>
+      <motion.div {...cardMotion} whileHover={{ y: -5 }} className="glass rounded-3xl p-5">
+        <div className="flex items-center gap-4">
+          <span className="grid h-12 w-12 place-items-center rounded-2xl bg-cyan-300/15 text-cyan-100">
+            <Icon size={24} />
+          </span>
+          <div>
+            <h3 className="text-lg font-semibold text-white">{subject.name}</h3>
+            <p className="text-sm text-slate-300">{subject.chapterCount} chapters</p>
+          </div>
         </div>
-      </div>
-      <div className="mt-5 flex items-center justify-between">
-        <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-slate-200">{subject.difficulty}</span>
-        <span className="text-xs text-cyan-100">AI notes available</span>
-      </div>
-      <div className="mt-5">
-        <ProgressBar value={subject.progress} label="Mastery" />
-      </div>
-      <Link
-        href={`/subjects/${subject.id}`}
-        className="mt-6 inline-flex w-full items-center justify-center rounded-2xl bg-cyan-300 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-white"
-      >
-        Open Subject
-      </Link>
-    </motion.div>
+        <div className="mt-5 flex items-center justify-between">
+          <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-slate-200">{subject.difficulty}</span>
+          <span className="text-xs text-cyan-100">AI notes available</span>
+        </div>
+        <div className="mt-5">
+          <ProgressBar value={subject.progress} label="Mastery" />
+        </div>
+        <div className="mt-6 flex gap-2">
+          <button 
+            onClick={() => setIsRoutineModalOpen(true)}
+            className="flex-1 flex items-center justify-center gap-2 rounded-2xl bg-white/10 px-4 py-3 text-sm font-semibold text-white transition hover:bg-white/20"
+          >
+            <Plus size={16} /> Routine
+          </button>
+          <Link
+            href={`/subjects/${subject.id}`}
+            className="flex-1 inline-flex items-center justify-center rounded-2xl bg-cyan-300 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-white"
+          >
+            Open Subject
+          </Link>
+        </div>
+      </motion.div>
+
+      <AnimatePresence>
+        {isRoutineModalOpen && (
+          <motion.div 
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          >
+            <motion.form 
+              initial={{ scale: 0.95 }} animate={{ scale: 1 }} exit={{ scale: 0.95 }}
+              onSubmit={handleCreateRoutine} 
+              className="glass w-full max-w-sm rounded-3xl p-6 relative border border-cyan-500/30"
+            >
+              <button type="button" onClick={() => setIsRoutineModalOpen(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white">
+                <X size={20} />
+              </button>
+              <div className="flex items-center gap-3 mb-6">
+                <Calendar className="text-cyan-400" />
+                <h2 className="text-xl font-bold text-white">Create Routine</h2>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Day</label>
+                  <select value={rDay} onChange={e => setRDay(e.target.value)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-white">
+                    {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map(d => <option key={d}>{d}</option>)}
+                  </select>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-400 uppercase mb-2">Start Time</label>
+                    <input type="time" value={rStartTime} onChange={e => setRStartTime(e.target.value)} required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-white" />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-400 uppercase mb-2">End Time</label>
+                    <input type="time" value={rEndTime} onChange={e => setREndTime(e.target.value)} required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-white" />
+                  </div>
+                </div>
+              </div>
+              
+              <button type="submit" className="mt-6 w-full rounded-xl bg-cyan-400 hover:bg-cyan-300 text-slate-900 py-3 font-bold transition shadow-glow">
+                Save Routine
+              </button>
+            </motion.form>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 

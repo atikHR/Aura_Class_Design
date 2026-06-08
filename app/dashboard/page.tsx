@@ -10,13 +10,20 @@ import { getClassById } from "@/data/classes";
 import { getChaptersForSubject, getSubjectsForClass } from "@/data/curriculum";
 import { teachers } from "@/data/teachers";
 import type { ClassLevel } from "@/data/types";
-import { getEnrollment, type Enrollment } from "@/lib/studentState";
+import { getEnrollment, getRoutines, getExams, getPerformanceData, type Enrollment } from "@/lib/studentState";
+import { StudyPlanCard, ExamScheduleCard, StudyStreakCard, PerformanceProgressCard } from "@/components/StudyAndExamCards";
 
 export default function DashboardPage() {
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null);
+  const [routines, setRoutines] = useState<any[]>([]);
+  const [exams, setExams] = useState<any[]>([]);
+  const [performance, setPerformance] = useState<any>(null);
 
   useEffect(() => {
     setEnrollment(getEnrollment());
+    setRoutines(getRoutines());
+    setExams(getExams());
+    setPerformance(getPerformanceData());
   }, []);
 
   const enrolledClass = useMemo<ClassLevel | undefined>(() => getClassById(enrollment?.classId), [enrollment]);
@@ -58,33 +65,32 @@ export default function DashboardPage() {
         </Link>
       </div>
 
+      {/* AI Study Planner & Progress */}
+      {performance && (
+        <section className="mb-8">
+          <div className="mb-4 flex items-center gap-3">
+            <Sparkles className="h-5 w-5 text-cyan-100" />
+            <h2 className="text-2xl font-semibold text-white">AI Study Planner & Progress</h2>
+          </div>
+          <div className="grid gap-5 lg:grid-cols-[1fr_0.8fr_1fr]">
+            <StudyPlanCard routines={routines} />
+            <div className="flex flex-col gap-5">
+              <StudyStreakCard streak={performance.streak} completed={performance.completedTasks} pending={performance.pendingTasks} />
+              <ExamScheduleCard exams={exams} />
+            </div>
+            <PerformanceProgressCard data={performance} />
+          </div>
+        </section>
+      )}
+
       <div className="grid gap-5 lg:grid-cols-[1.05fr_0.95fr]">
-        <section className="glass rounded-3xl p-6">
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm uppercase tracking-[0.18em] text-cyan-100">Enrolled class</p>
-              <h2 className="mt-3 text-3xl font-semibold text-white">{enrolledClass.name}</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-300">{enrolledClass.curriculum} · {enrolledClass.level}</p>
-            </div>
-            <div className="rounded-3xl border border-emerald-300/25 bg-emerald-300/10 p-4 text-right">
-              <p className="text-sm text-emerald-100">Subscription status</p>
-              <p className="mt-2 text-2xl font-bold text-white">Active</p>
-            </div>
+        <section className="glass rounded-3xl p-6 flex flex-col justify-between">
+          <div>
+            <p className="text-sm uppercase tracking-[0.18em] text-cyan-100">Enrolled class</p>
+            <h2 className="mt-3 text-3xl font-semibold text-white">{enrolledClass.name}</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-300">{enrolledClass.curriculum} · {enrolledClass.level}</p>
           </div>
-          <div className="mt-6 grid gap-3 sm:grid-cols-3">
-            <div className="rounded-2xl bg-white/5 p-4">
-              <p className="text-xs text-slate-400">Monthly plan</p>
-              <p className="mt-2 text-xl font-semibold text-white">৳{enrolledClass.price}/month</p>
-            </div>
-            <div className="rounded-2xl bg-white/5 p-4">
-              <p className="text-xs text-slate-400">Subjects</p>
-              <p className="mt-2 text-xl font-semibold text-white">{classSubjects.length}</p>
-            </div>
-            <div className="rounded-2xl bg-white/5 p-4">
-              <p className="text-xs text-slate-400">Payment</p>
-              <p className="mt-2 text-xl font-semibold text-white">{enrollment.paymentMethod}</p>
-            </div>
-          </div>
+          
           <div className="mt-6">
             <ProgressBar value={enrolledClass.progress} label="Class progress" />
           </div>
@@ -129,7 +135,7 @@ export default function DashboardPage() {
 
       <section className="mt-8">
         <div className="mb-4 flex items-center gap-3">
-          <Sparkles className="h-5 w-5 text-cyan-100" />
+          <Bot className="h-5 w-5 text-cyan-100" />
           <h2 className="text-2xl font-semibold text-white">AI teachers for {enrolledClass.name}</h2>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">

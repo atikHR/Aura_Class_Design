@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, Bot, Camera, CreditCard, GraduationCap, Home, NotebookText, Sparkles } from "lucide-react";
+import { BookOpen, Bot, Camera, CreditCard, GraduationCap, Home, NotebookText, Sparkles, Target } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -9,6 +9,7 @@ import { getEnrollment } from "@/lib/studentState";
 const enrolledNavItems = [
   { href: "/dashboard", label: "Dashboard", icon: Home },
   { href: "/subjects", label: "Subjects", icon: GraduationCap },
+  { href: "/exam-management", label: "Exams", icon: Target },
   { href: "/lecturer-room", label: "AI Class", icon: Bot },
   { href: "/instant-solve", label: "Instant Solve", icon: Camera },
   { href: "/notes", label: "Notes", icon: NotebookText },

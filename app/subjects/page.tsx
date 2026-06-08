@@ -48,6 +48,7 @@ export default function SubjectsPage() {
         </div>
         <Link href="/dashboard" className="text-sm font-semibold text-cyan-100 hover:text-white">Back to dashboard</Link>
       </div>
+      
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {classSubjects.map((subject) => (
           <SubjectCard key={subject.id} subject={subject} />
